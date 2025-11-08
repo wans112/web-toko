@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { Card, List, Button, Space, Tag, notification } from "antd";
+import { Card, List, Button, Space, Tag, notification, InputNumber } from "antd";
 import { ShoppingCart, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -66,6 +66,22 @@ export default function ProductDetailClient({ product, discounts = [] }) {
       const next = Math.max(0, (s[unitId] || 0) - 1);
       return { ...s, [unitId]: next };
     });
+  }
+
+  // Handle manual input change for a unit's quantity
+  function handleManualChange(unitId, value) {
+    // value can be null/undefined when cleared; treat as 0
+    let v = Number(value || 0);
+    if (!Number.isFinite(v) || Number.isNaN(v)) v = 0;
+    // enforce integer
+    v = Math.floor(v);
+
+    const unit = (product.units || []).find((u) => u.id === unitId);
+    const stock = Number(unit?.stock || 0);
+    if (v < 0) v = 0;
+    if (stock > 0 && v > stock) v = stock;
+
+    setQtyByUnit((s) => ({ ...s, [unitId]: v }));
   }
 
   async function addToCart() {
@@ -245,7 +261,15 @@ export default function ProductDetailClient({ product, discounts = [] }) {
                       </div>
                       <div className="flex items-center gap-2">
                         <Button size="small" onClick={() => dec(u.id)} disabled={(qtyByUnit[u.id] || 0) <= 0}>-</Button>
-                        <div className="w-10 text-center">{qtyByUnit[u.id] || 0}</div>
+                        <InputNumber
+                          size="small"
+                          min={0}
+                          max={Number(u.stock || 0)}
+                          value={qtyByUnit[u.id] || 0}
+                          onChange={(val) => handleManualChange(u.id, val)}
+                          controls={false}
+                          className="w-16 text-center"
+                        />
                         <Button
                           size="small"
                           type="primary"
