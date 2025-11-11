@@ -6,7 +6,7 @@
 import { useRouter } from "next/navigation";
 import { Button } from "antd";
 import { ArrowLeftOutlined } from '@ant-design/icons';
-import Profile from "@/app/components/client/Profile";
+import Profile from "@/components/client/Profile";
 
 function ProfilePage() {
   const router = useRouter();

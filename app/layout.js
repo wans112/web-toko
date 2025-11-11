@@ -1,9 +1,9 @@
 import "./globals.css";
 import "antd/dist/reset.css";
 import '@ant-design/v5-patch-for-react-19';
-import PresenceProvider from "@/app/components/client/PresenceProvider";
-import GlobalNotifications from "@/app/components/client/GlobalNotifications";
-import ThemeConfigProvider from "@/app/components/client/ThemeConfigProvider";
+import PresenceProvider from "@/components/client/PresenceProvider";
+import GlobalNotifications from "@/components/client/GlobalNotifications";
+import ThemeConfigProvider from "@/components/client/ThemeConfigProvider";
 
 export default function RootLayout({ children }) {
   return (

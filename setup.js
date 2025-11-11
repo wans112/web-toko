@@ -171,6 +171,30 @@ db.serialize(() => {
     "discount_units table"
   );
 
+  // discount_tiers table (tiered discount thresholds)
+  runCreate(
+    `CREATE TABLE IF NOT EXISTS discount_tiers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      discount_id INTEGER NOT NULL,
+      label TEXT,
+      min_quantity INTEGER,
+      max_quantity INTEGER,
+      min_amount REAL,
+      max_amount REAL,
+      value_type TEXT NOT NULL,
+      value REAL NOT NULL DEFAULT 0,
+      priority INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (discount_id) REFERENCES discount(id) ON DELETE CASCADE
+    );`,
+    "discount_tiers table"
+  );
+
+  runCreate(
+    `CREATE INDEX IF NOT EXISTS idx_discount_tiers_discount_id_priority
+     ON discount_tiers (discount_id, priority);`,
+    "discount_tiers index"
+  );
+
   // cart table (shopping cart for users)
   runCreate(
     `CREATE TABLE IF NOT EXISTS cart (

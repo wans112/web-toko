@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import CheckoutClient from './CheckoutClient';
+import CheckoutClient from '../../components/client/checkout/CheckoutClient';
 
 export default function Page() {
   return (

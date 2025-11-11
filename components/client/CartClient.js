@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { 
 	Card, 
 	List, 
@@ -15,6 +15,12 @@ import {
 } from "antd";
 import { ShoppingCart, Trash2, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+	calculateDiscountPrice as resolveDiscountPrice,
+	calculateOriginalTotal,
+	calculateTotal,
+	formatPrice
+} from "./checkout/utils/pricing";
 
 const { Title, Text } = Typography;
 
@@ -49,44 +55,16 @@ export default function CartClient({ onStartShopping }) {
 	}
 
 	async function fetchDiscounts() {
-		try {
-			const res = await fetch("/api/product/discount");
-			const data = await res.json();
-			if (data.success) {
-				setDiscounts(data.data.filter(d => d.active) || []);
-			}
-		} catch (err) {
-			console.error('Error fetching discounts:', err);
-		}
+	    try {
+	        const res = await fetch("/api/product/discount");
+	        const data = await res.json();
+	        if (data.success) {
+	            setDiscounts((data.data || []).filter((d) => d.is_active_now ?? d.active) || []);
+	        }
+	    } catch (err) {
+	        console.error('Error fetching discounts:', err);
+	    }
 	}
-
-	// Helper function to calculate discount price
-	const calculateDiscountPrice = (originalPrice, productId, unitId) => {
-		const activeDiscounts = discounts.filter(d => {
-			if (d.type === 'product' && Array.isArray(d.product_ids)) {
-				return d.product_ids.includes(productId);
-			}
-			if (d.type === 'unit' && Array.isArray(d.unit_ids)) {
-				return d.unit_ids.includes(unitId);
-			}
-			return false;
-		});
-
-		if (activeDiscounts.length === 0) return null;
-
-		let finalPrice = originalPrice;
-		activeDiscounts.forEach(discount => {
-			if (discount.value_type === 'percentage') {
-				finalPrice = finalPrice - (finalPrice * discount.value / 100);
-			} else if (discount.value_type === 'nominal') {
-				finalPrice = Math.max(0, finalPrice - discount.value);
-			}
-		});
-
-		return finalPrice !== originalPrice ? finalPrice : null;
-	};
-
-	const formatPrice = (price) => `Rp ${Number(price || 0).toLocaleString('id-ID')}`;
 
 	async function updateQuantity(cartId, newQuantity) {
 		if (updating[cartId]) return;
@@ -159,18 +137,10 @@ export default function CartClient({ onStartShopping }) {
 		}
 	}
 
+	const aggregateCache = useMemo(() => new Map(), [cartItems, discounts]);
 	const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-	const totalPrice = cartItems.reduce((sum, item) => {
-		const originalPrice = Number(item.price || 0);
-		const discountPrice = calculateDiscountPrice(originalPrice, item.product_id, item.unit_id);
-		const finalPrice = discountPrice || originalPrice;
-		return sum + (item.quantity * finalPrice);
-	}, 0);
-
-	const totalOriginalPrice = cartItems.reduce((sum, item) => {
-		return sum + (item.quantity * Number(item.price || 0));
-	}, 0);
-
+	const totalOriginalPrice = calculateOriginalTotal(cartItems);
+	const totalPrice = calculateTotal(cartItems, discounts, { aggregateCache });
 	const hasTotalDiscount = totalOriginalPrice !== totalPrice;
 
 	const handleCheckout = () => {
@@ -233,7 +203,10 @@ export default function CartClient({ onStartShopping }) {
 							dataSource={cartItems}
 							renderItem={(item) => {
 								const originalPrice = Number(item.price || 0);
-								const discountPrice = calculateDiscountPrice(originalPrice, item.product_id, item.unit_id);
+								const discountPrice = resolveDiscountPrice(originalPrice, item.product_id, item.unit_id, discounts, {
+									items: cartItems,
+									aggregateCache
+								});
 								const finalPrice = discountPrice || originalPrice;
 								const hasDiscount = discountPrice !== null;
 								const lineTotal = item.quantity * finalPrice;

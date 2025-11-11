@@ -1,13 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import ProductClient from "@/app/components/client/ProductClient";
-import FloatingBottomNav from "@/app/components/client/FloatingBottomNav";
+import ProductClient from "@/components/client/ProductClient";
+import FloatingBottomNav from "@/components/client/FloatingBottomNav";
 import { Home, MessagesSquare, ReceiptText, ShoppingCart, User } from "lucide-react";
-import Profile from "@/app/components/client/Profile";
-import CartClient from "@/app/components/client/CartClient";
-import OrderClient from "@/app/components/client/OrderClient";
-import Chating from "@/app/components/shared/ui/Chating";
+import Profile from "@/components/client/Profile";
+import CartClient from "@/components/client/CartClient";
+import OrderClient from "@/components/client/OrderClient";
+import Chating from "@/components/shared/ui/Chating";
 
 export default function DashboardClient() {
   const searchParams = useSearchParams();

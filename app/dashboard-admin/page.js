@@ -1,16 +1,17 @@
 "use client";
 
-import SidebarAndNavbar from "@/app/components/shared/ui/SidebarAndNavbar";
-import ManagementProduct from "@/app/components/admin/management/ManagementProduct";
-import ManagementUsersByAdmin from "@/app/components/admin/management/ManagementUsersByAdmin";
-import ManagementOrders from "@/app/components/admin/management/ManagementOrders";
+import SidebarAndNavbar from "@/components/shared/ui/SidebarAndNavbar";
+import ManagementProduct from "@/components/admin/management/ManagementProduct";
+import ManagementUsersByAdmin from "@/components/admin/management/ManagementUsersByAdmin";
+import ManagementOrders from "@/components/admin/management/ManagementOrders";
 import { UserOutlined, AppstoreOutlined, LogoutOutlined, PercentageOutlined, CreditCardOutlined, ShoppingCartOutlined, SettingOutlined, MessageOutlined, TagOutlined, DashboardOutlined } from '@ant-design/icons';
 import { useRouter } from "next/navigation";
-import ManagementDiscountPercentage from "@/app/components/admin/management/ManagementDiscountPercentage";
-import ManagementDiscountNominal from "@/app/components/admin/management/ManagementDiscountNominal";
-import ManagementPayment from "@/app/components/admin/management/ManagementPayment";
+import ManagementDiscountPercentage from "@/components/admin/management/ManagementDiscountPercentage";
+import ManagementDiscountNominal from "@/components/admin/management/ManagementDiscountNominal";
+import ManagementDiscountTiered from "@/components/admin/management/ManagementDiscountTiered";
+import ManagementPayment from "@/components/admin/management/ManagementPayment";
 import { useEffect, useState } from "react";
-import Chating from "../components/shared/ui/Chating";
+import Chating from "@/components/shared/ui/Chating";
 
 export default function DashboardAdminPage() {
   const router = useRouter();
@@ -130,6 +131,7 @@ export default function DashboardAdminPage() {
       component: (
         <>
           <div className="flex flex-col gap-4">
+            <ManagementDiscountTiered />
             <ManagementDiscountPercentage />
             <ManagementDiscountNominal />
           </div>

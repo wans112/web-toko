@@ -1,8 +1,14 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Card, List, Button, Space, Tag, notification, InputNumber } from "antd";
 import { ShoppingCart, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+  calculateDiscountPrice as resolveDiscountPrice,
+  calculateOriginalTotal,
+  calculateTotal,
+  formatPrice
+} from "@/components/client/checkout/utils/pricing";
 
 export default function ProductDetailClient({ product, discounts = [] }) {
   const [qtyByUnit, setQtyByUnit] = useState({});
@@ -17,33 +23,35 @@ export default function ProductDetailClient({ product, discounts = [] }) {
     setQtyByUnit(initial);
   }, [product]);
 
-  // Helper function to calculate discount price
-  const calculateDiscountPrice = (originalPrice, productId, unitId) => {
-    const activeDiscounts = discounts.filter(d => {
-      if (d.type === 'product' && Array.isArray(d.product_ids)) {
-        return d.product_ids.includes(productId);
-      }
-      if (d.type === 'unit' && Array.isArray(d.unit_ids)) {
-        return d.unit_ids.includes(unitId);
-      }
-      return false;
-    });
+  const selectedItems = useMemo(() => {
+    if (!Array.isArray(product?.units)) return [];
+    return product.units
+      .map((u) => ({
+        product_id: product.id,
+        product_name: product.name,
+        unit_id: u.id,
+        unit_name: u.unit_name,
+        price: Number(u.price || 0),
+        quantity: qtyByUnit[u.id] || 0
+      }))
+      .filter((item) => item.quantity > 0);
+  }, [product, qtyByUnit]);
 
-    if (activeDiscounts.length === 0) return null;
+  const aggregateCache = useMemo(() => new Map(), [selectedItems, discounts]);
 
-    let finalPrice = originalPrice;
-    activeDiscounts.forEach(discount => {
-      if (discount.value_type === 'percentage') {
-        finalPrice = finalPrice - (finalPrice * discount.value / 100);
-      } else if (discount.value_type === 'nominal') {
-        finalPrice = Math.max(0, finalPrice - discount.value);
-      }
-    });
+  const totalPrice = useMemo(
+    () => calculateTotal(selectedItems, discounts, { aggregateCache }),
+    [selectedItems, discounts, aggregateCache]
+  );
 
-    return finalPrice !== originalPrice ? finalPrice : null;
-  };
+  const totalOriginalPrice = useMemo(
+    () => calculateOriginalTotal(selectedItems),
+    [selectedItems]
+  );
 
-  const formatPrice = (price) => `Rp ${Number(price || 0).toLocaleString('id-ID')}`;
+  const totalDiscount = Math.max(0, totalOriginalPrice - totalPrice);
+
+  const hasTotalDiscount = totalOriginalPrice !== totalPrice;
 
   const handleBack = () => {
     router.back();
@@ -167,22 +175,6 @@ export default function ProductDetailClient({ product, discounts = [] }) {
     }
   }
 
-  const totalPrice = (product.units || []).reduce((sum, u) => {
-    const q = qtyByUnit[u.id] || 0;
-    const originalPrice = Number(u.price || 0);
-    const discountPrice = calculateDiscountPrice(originalPrice, product.id, u.id);
-    const finalPrice = discountPrice || originalPrice;
-    return sum + q * finalPrice;
-  }, 0);
-
-  const totalOriginalPrice = (product.units || []).reduce((sum, u) => {
-    const q = qtyByUnit[u.id] || 0;
-    const originalPrice = Number(u.price || 0);
-    return sum + q * originalPrice;
-  }, 0);
-
-  const hasTotalDiscount = totalOriginalPrice !== totalPrice;
-
   return (
     <Card className="p-4">
       {contextHolder}
@@ -238,7 +230,10 @@ export default function ProductDetailClient({ product, discounts = [] }) {
                       <div className="text-right">
                         {(() => {
                           const originalPrice = Number(u.price || 0);
-                          const discountPrice = calculateDiscountPrice(originalPrice, product.id, u.id);
+                          const discountPrice = resolveDiscountPrice(originalPrice, product.id, u.id, discounts, {
+                            items: selectedItems,
+                            aggregateCache
+                          });
                           
                           if (discountPrice !== null) {
                             return (
@@ -294,37 +289,43 @@ export default function ProductDetailClient({ product, discounts = [] }) {
       <div className="w-full mt-4 p-3">
         <h3 className="font-medium mb-2">Ringkasan</h3>
         <div className="space-y-2">
-          {((product.units || []).filter((u) => (qtyByUnit[u.id] || 0) > 0)).length === 0 ? (
+          {selectedItems.length === 0 ? (
             <div className="text-sm text-gray-400">Belum ada item yang dipilih</div>
           ) : (
-            (product.units || [])
-              .filter((u) => (qtyByUnit[u.id] || 0) > 0)
-              .map((u) => {
-                const originalPrice = Number(u.price || 0);
-                const discountPrice = calculateDiscountPrice(originalPrice, product.id, u.id);
-                const finalPrice = discountPrice || originalPrice;
-                const originalLineTotal = qtyByUnit[u.id] * originalPrice;
-                const finalLineTotal = qtyByUnit[u.id] * finalPrice;
-                const hasDiscount = discountPrice !== null;
-                
-                return (
-                  <div key={u.id} className="flex justify-between">
-                    <div className="text-sm">
-                      {u.unit_name} {qtyByUnit[u.id]}x
-                    </div>
-                    <div className="text-sm font-medium text-right">
-                      {hasDiscount ? (
-                        <div>
-                          <div className="text-gray-400 line-through text-xs">{formatPrice(originalLineTotal)}</div>
-                          <div className="text-green-600">{formatPrice(finalLineTotal)}</div>
-                        </div>
-                      ) : (
-                        <div>{formatPrice(finalLineTotal)}</div>
-                      )}
-                    </div>
+            selectedItems.map((item) => {
+              const originalLineTotal = Number(item.quantity || 0) * Number(item.price || 0);
+              const discountPrice = resolveDiscountPrice(item.price, item.product_id, item.unit_id, discounts, {
+                items: selectedItems,
+                aggregateCache
+              });
+              const finalUnitPrice = discountPrice ?? item.price;
+              const finalLineTotal = Number(item.quantity || 0) * Number(finalUnitPrice || 0);
+              const hasDiscount = discountPrice !== null;
+
+              return (
+                <div key={item.unit_id} className="flex justify-between">
+                  <div className="text-sm">
+                    {item.unit_name} {item.quantity}x
                   </div>
-                );
-              })
+                  <div className="text-sm font-medium text-right">
+                    {hasDiscount ? (
+                      <div>
+                        <div className="text-gray-400 line-through text-xs">{formatPrice(originalLineTotal)}</div>
+                        <div className="text-green-600">{formatPrice(finalLineTotal)}</div>
+                      </div>
+                    ) : (
+                      <div>{formatPrice(finalLineTotal)}</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+          {hasTotalDiscount && (
+            <div className="flex justify-between text-sm text-green-600">
+              <span>Diskon</span>
+              <span>-{formatPrice(totalDiscount)}</span>
+            </div>
           )}
         </div>
 
@@ -347,6 +348,6 @@ export default function ProductDetailClient({ product, discounts = [] }) {
           </div>
         </div>
       </div>
-  </Card>
+    </Card>
   );
 }

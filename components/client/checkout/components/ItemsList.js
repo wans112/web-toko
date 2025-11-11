@@ -1,17 +1,28 @@
 "use client";
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { List } from 'antd';
 import Image from 'next/image';
 import { calculateDiscountPrice, formatPrice } from '../utils/pricing';
 
 export default function ItemsList({ items = [], discounts = [] }) {
+  const aggregateCache = useMemo(() => new Map(), [items, discounts]);
+
   return (
     <List
       dataSource={items}
       renderItem={(item) => {
         const originalPrice = Number(item.price || 0);
-        const discountPrice = calculateDiscountPrice(originalPrice, item.product_id, item.unit_id, discounts);
+        const discountPrice = calculateDiscountPrice(
+          originalPrice,
+          item.product_id,
+          item.unit_id,
+          discounts,
+          {
+            items,
+            aggregateCache
+          }
+        );
         const finalPrice = discountPrice ?? originalPrice;
         const hasDiscount = discountPrice !== null;
         const lineTotal = Number(item.quantity || 0) * finalPrice;

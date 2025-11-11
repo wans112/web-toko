@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { Table, Button, Form, notification, Popconfirm, Image, Space, Tag, Input } from "antd";
-import ProductForm from "@/app/components/add-on/FormProduct";
-import ModalCategories from "@/app/components/add-on/ModalCategories";
+import ProductForm from "@/components/add-on/FormProduct";
+import ModalCategories from "@/components/add-on/ModalCategories";
 import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined, TagOutlined } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 

@@ -3,23 +3,19 @@
 import React from 'react';
 import { Card, Divider, Typography, Button } from 'antd';
 import { ShoppingCartOutlined } from '@ant-design/icons';
-import { buildSubtotalsByUnit, formatPrice } from '../utils/pricing';
+import {
+  buildSubtotalsByUnit,
+  calculateOriginalTotal,
+  calculateTotal,
+  formatPrice
+} from '../utils/pricing';
 
 const { Text } = Typography;
 
 export default function SummaryCard({ items = [], discounts = [], onSubmit, submitting = false }) {
   const subtotalEntries = buildSubtotalsByUnit(items, discounts);
-  const originalTotalAmount = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
-  const discountedTotalAmount = items.reduce((sum, item) => {
-    const originalPrice = Number(item.price || 0);
-    const discountPrice = (() => {
-      // local import to avoid circular, rely on util via subtotal builder would be fine but explicit here
-      const { calculateDiscountPrice } = require('../utils/pricing');
-      return calculateDiscountPrice(originalPrice, item.product_id, item.unit_id, discounts);
-    })();
-    const finalPrice = discountPrice ?? originalPrice;
-    return sum + finalPrice * Number(item.quantity || 1);
-  }, 0);
+  const originalTotalAmount = calculateOriginalTotal(items);
+  const discountedTotalAmount = calculateTotal(items, discounts);
   const totalDiscount = originalTotalAmount - discountedTotalAmount;
   const hasDiscount = totalDiscount > 0;
 
