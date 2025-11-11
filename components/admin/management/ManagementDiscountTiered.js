@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Table,
   Button,
@@ -37,6 +37,86 @@ export default function ManagementDiscountTiered() {
   const [units, setUnits] = useState([]);
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const { RangePicker } = DatePicker;
+  const watchedType = Form.useWatch("type", form);
+  const effectiveType = watchedType || form.getFieldValue("type") || (editing?.type ?? "product");
+  const isProductType = effectiveType === "product";
+  const isUnitType = effectiveType === "unit";
+  const previousTypeRef = useRef(effectiveType);
+
+  const ensureDefaultTier = useCallback(() => {
+    const currentType = form.getFieldValue("type") || "product";
+    const tiers = form.getFieldValue("tiers");
+    if (!tiers || tiers.length === 0) {
+      form.setFieldsValue({
+        tiers: [
+          {
+            label: "",
+            min_quantity: null,
+            max_quantity: null,
+            min_amount: null,
+            max_amount: null,
+            value_type: currentType === "product" ? "nominal" : "percentage",
+            value: null
+          }
+        ]
+      });
+    }
+  }, [form]);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const currentType = effectiveType;
+    if (!currentType) return;
+
+    const tiers = form.getFieldValue("tiers") || [];
+    const previousType = previousTypeRef.current;
+
+    if (previousType !== currentType) {
+      let shouldUpdate = false;
+
+      const updatedTiers = tiers.map((tier) => {
+        const next = { ...tier };
+        if (currentType === "product") {
+          if (next.value_type !== "nominal") {
+            next.value_type = "nominal";
+            shouldUpdate = true;
+          }
+          if (next.min_quantity !== null && next.min_quantity !== undefined) {
+            next.min_quantity = null;
+            shouldUpdate = true;
+          }
+          if (next.max_quantity !== null && next.max_quantity !== undefined) {
+            next.max_quantity = null;
+            shouldUpdate = true;
+          }
+        } else if (currentType === "unit") {
+          if (next.min_amount !== null && next.min_amount !== undefined) {
+            next.min_amount = null;
+            shouldUpdate = true;
+          }
+          if (next.max_amount !== null && next.max_amount !== undefined) {
+            next.max_amount = null;
+            shouldUpdate = true;
+          }
+          if (next.value_type === "nominal") {
+            next.value_type = "percentage";
+            shouldUpdate = true;
+          }
+        }
+        return next;
+      });
+
+      if (shouldUpdate) {
+        form.setFieldsValue({ tiers: updatedTiers });
+      }
+    }
+
+    if (!tiers.length) {
+      ensureDefaultTier();
+    }
+
+    previousTypeRef.current = currentType;
+  }, [effectiveType, ensureDefaultTier, form, modalOpen]);
 
   const formatDateTime = (value) => {
     if (!value) return null;
@@ -323,25 +403,6 @@ export default function ManagementDiscountTiered() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const ensureDefaultTier = () => {
-    const tiers = form.getFieldValue("tiers");
-    if (!tiers || tiers.length === 0) {
-      form.setFieldsValue({
-        tiers: [
-          {
-            label: "",
-            min_quantity: null,
-            max_quantity: null,
-            min_amount: null,
-            max_amount: null,
-            value_type: "percentage",
-            value: 5
-          }
-        ]
-      });
-    }
-  };
-
   const handleAdd = () => {
     setEditing(null);
     form.resetFields();
@@ -366,7 +427,7 @@ export default function ManagementDiscountTiered() {
       productIds = Array.isArray(record.product_ids) ? record.product_ids : [];
     }
 
-    const tiersForForm = Array.isArray(record.tiers)
+    let tiersForForm = Array.isArray(record.tiers)
       ? record.tiers.map((tier) => ({
           label: tier.label || "",
           min_quantity: tier.min_quantity ?? null,
@@ -377,6 +438,21 @@ export default function ManagementDiscountTiered() {
           value: tier.value
         }))
       : [];
+
+    if (record.type === "product") {
+      tiersForForm = tiersForForm.map((tier) => ({
+        ...tier,
+        min_quantity: null,
+        max_quantity: null,
+        value_type: "nominal"
+      }));
+    } else if (record.type === "unit") {
+      tiersForForm = tiersForForm.map((tier) => ({
+        ...tier,
+        min_amount: null,
+        max_amount: null
+      }));
+    }
 
     form.setFieldsValue({
       name: record.name,
@@ -417,17 +493,30 @@ export default function ManagementDiscountTiered() {
     return Number.isNaN(numeric) ? null : numeric;
   };
 
-  const normalizeTierPayload = (tiers = []) =>
-    tiers.map((tier, index) => ({
-      label: tier.label?.trim() ? tier.label.trim() : null,
-      min_quantity: toNumericOrNull(tier.min_quantity),
-      max_quantity: toNumericOrNull(tier.max_quantity),
-      min_amount: toNumericOrNull(tier.min_amount),
-      max_amount: toNumericOrNull(tier.max_amount),
-      value_type: tier.value_type,
-      value: Number(tier.value ?? 0),
-      priority: index
-    }));
+  const normalizeTierPayload = (tiers = [], discountType) =>
+    tiers.map((tier, index) => {
+      const normalized = {
+        label: tier.label?.trim() ? tier.label.trim() : null,
+        min_quantity: toNumericOrNull(tier.min_quantity),
+        max_quantity: toNumericOrNull(tier.max_quantity),
+        min_amount: toNumericOrNull(tier.min_amount),
+        max_amount: toNumericOrNull(tier.max_amount),
+        value_type: tier.value_type,
+        value: Number(tier.value ?? 0),
+        priority: index
+      };
+
+      if (discountType === "product") {
+        normalized.min_quantity = null;
+        normalized.max_quantity = null;
+        normalized.value_type = "nominal";
+      } else if (discountType === "unit") {
+        normalized.min_amount = null;
+        normalized.max_amount = null;
+      }
+
+      return normalized;
+    });
 
   const handleModalOk = async () => {
     try {
@@ -443,7 +532,7 @@ export default function ManagementDiscountTiered() {
           : { unit_ids: restValues.unit_ids }),
         start_at: startDate ? startDate.toISOString() : null,
         end_at: endDate ? endDate.toISOString() : null,
-        tiers: normalizeTierPayload(tiers)
+        tiers: normalizeTierPayload(tiers, restValues.type)
       };
 
       if (editing) {
@@ -596,6 +685,11 @@ export default function ManagementDiscountTiered() {
           )}
 
           <Divider>Tingkatan Diskon</Divider>
+          <div className="text-xs text-gray-500 mb-3">
+            {isProductType
+              ? "Diskon produk menggunakan nominal belanja sebagai syarat dan potongan dalam rupiah."
+              : "Diskon unit menggunakan jumlah unit sebagai syarat tingkat."}
+          </div>
 
           <Form.List
             name="tiers"
@@ -635,46 +729,63 @@ export default function ManagementDiscountTiered() {
                     </Form.Item>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <Form.Item
-                        {...restField}
-                        name={[name, "min_quantity"]}
-                        label="Jumlah Unit Minimum"
-                      >
-                        <InputNumber min={0} style={{ width: "100%" }} placeholder="Contoh: 5" />
-                      </Form.Item>
-                      <Form.Item
-                        {...restField}
-                        name={[name, "max_quantity"]}
-                        label="Jumlah Unit Maksimum"
-                      >
-                        <InputNumber min={0} style={{ width: "100%" }} placeholder="Contoh: 10" />
-                      </Form.Item>
-                      <Form.Item
-                        {...restField}
-                        name={[name, "min_amount"]}
-                        label="Nominal Minimum (Rp)"
-                      >
-                        <InputNumber
-                          min={0}
-                          style={{ width: "100%" }}
-                          formatter={formatNumberInput}
-                          parser={parseNumberInput}
-                          placeholder="Contoh: 100000"
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        {...restField}
-                        name={[name, "max_amount"]}
-                        label="Nominal Maksimum (Rp)"
-                      >
-                        <InputNumber
-                          min={0}
-                          style={{ width: "100%" }}
-                          formatter={formatNumberInput}
-                          parser={parseNumberInput}
-                          placeholder="Contoh: 500000"
-                        />
-                      </Form.Item>
+                      {isUnitType && (
+                        <>
+                          <Form.Item
+                            {...restField}
+                            name={[name, "min_quantity"]}
+                            label="Jumlah Unit Minimum"
+                          >
+                            <InputNumber
+                              min={0}
+                              style={{ width: "100%" }}
+                              placeholder="Contoh: 5"
+                            />
+                          </Form.Item>
+                          <Form.Item
+                            {...restField}
+                            name={[name, "max_quantity"]}
+                            label="Jumlah Unit Maksimum"
+                          >
+                            <InputNumber
+                              min={0}
+                              style={{ width: "100%" }}
+                              placeholder="Contoh: 10"
+                            />
+                          </Form.Item>
+                        </>
+                      )}
+
+                      {isProductType && (
+                        <>
+                          <Form.Item
+                            {...restField}
+                            name={[name, "min_amount"]}
+                            label="Nominal Minimum (Rp)"
+                          >
+                            <InputNumber
+                              min={0}
+                              style={{ width: "100%" }}
+                              formatter={formatNumberInput}
+                              parser={parseNumberInput}
+                              placeholder="Contoh: 100000"
+                            />
+                          </Form.Item>
+                          <Form.Item
+                            {...restField}
+                            name={[name, "max_amount"]}
+                            label="Nominal Maksimum (Rp)"
+                          >
+                            <InputNumber
+                              min={0}
+                              style={{ width: "100%" }}
+                              formatter={formatNumberInput}
+                              parser={parseNumberInput}
+                              placeholder="Contoh: 500000"
+                            />
+                          </Form.Item>
+                        </>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -684,7 +795,10 @@ export default function ManagementDiscountTiered() {
                         label="Tipe Nilai"
                         rules={[{ required: true, message: "Pilih tipe nilai" }]}
                       >
-                        <Select options={VALUE_TYPE_OPTIONS} />
+                        <Select
+                          options={isProductType ? VALUE_TYPE_OPTIONS.filter((opt) => opt.value === "nominal") : VALUE_TYPE_OPTIONS}
+                          disabled={isProductType}
+                        />
                       </Form.Item>
 
                       <Form.Item
@@ -725,17 +839,18 @@ export default function ManagementDiscountTiered() {
 
                 <Button
                   type="dashed"
-                  onClick={() =>
+                  onClick={() => {
+                    const type = form.getFieldValue("type") || "product";
                     add({
                       label: "",
-                      min_quantity: null,
-                      max_quantity: null,
-                      min_amount: null,
-                      max_amount: null,
-                      value_type: "percentage",
-                      value: 5
-                    })
-                  }
+                      min_quantity: type === "unit" ? null : null,
+                      max_quantity: type === "unit" ? null : null,
+                      min_amount: type === "product" ? null : null,
+                      max_amount: type === "product" ? null : null,
+                      value_type: type === "product" ? "nominal" : "percentage",
+                      value: null
+                    });
+                  }}
                   block
                   icon={<PlusOutlined />}
                 >

@@ -27,6 +27,7 @@ function validateDiscountData(body, isUpdate = false, existingDiscount = null) {
   const rawValueType = value_type || existingDiscount?.value_type || null;
   const effectiveValueType = typeof rawValueType === 'string' ? rawValueType.toLowerCase() : rawValueType;
 
+    const effectiveType = type || existingDiscount?.type || null;
   if (!isUpdate && !name?.trim()) {
     return "Nama diskon wajib diisi";
   }
@@ -119,6 +120,24 @@ function validateDiscountData(body, isUpdate = false, existingDiscount = null) {
         const hasAmountRule = normalizedMinAmount !== null || normalizedMaxAmount !== null;
 
         if (!hasQuantityRule && !hasAmountRule) {
+          if (effectiveType === 'product') {
+            if (tierValueType !== 'nominal') {
+              return `Diskon produk hanya mendukung nilai nominal pada tingkat ke-${i + 1}`;
+            }
+            if (hasQuantityRule) {
+              return `Diskon produk tidak boleh menggunakan syarat jumlah pada tingkat ke-${i + 1}`;
+            }
+            if (!hasAmountRule) {
+              return `Diskon produk harus memiliki syarat nominal pada tingkat ke-${i + 1}`;
+            }
+          } else if (effectiveType === 'unit') {
+            if (hasAmountRule) {
+              return `Diskon unit tidak boleh menggunakan syarat nominal pada tingkat ke-${i + 1}`;
+            }
+            if (!hasQuantityRule) {
+              return `Diskon unit harus memiliki syarat jumlah pada tingkat ke-${i + 1}`;
+            }
+          }
           return `Tingkat diskon ke-${i + 1} harus memiliki minimal satu syarat jumlah unit atau nominal belanja`;
         }
 
@@ -339,8 +358,8 @@ function parseNullableNumber(value) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-function normalizeTierForStorage(tier, index) {
-  return {
+function normalizeTierForStorage(tier, index, discountType) {
+  const normalized = {
     label: tier?.label ? String(tier.label).trim() || null : null,
     min_quantity: parseNullableInteger(tier?.min_quantity),
     max_quantity: parseNullableInteger(tier?.max_quantity),
@@ -353,6 +372,21 @@ function normalizeTierForStorage(tier, index) {
     value: Number(tier?.value ?? 0),
     priority: Number.isFinite(Number(tier?.priority)) ? Number(tier.priority) : index
   };
+
+  if (discountType === "product") {
+    normalized.min_quantity = null;
+    normalized.max_quantity = null;
+    normalized.value_type = "nominal";
+  } else if (discountType === "unit") {
+    normalized.min_amount = null;
+    normalized.max_amount = null;
+  }
+
+  if (!normalized.value_type) {
+    normalized.value_type = discountType === "product" ? "nominal" : "percentage";
+  }
+
+  return normalized;
 }
 
 // GET /api/product/discount
@@ -750,7 +784,8 @@ export async function PATCH(request) {
 
         if (Array.isArray(tiers) && tiers.length > 0) {
           const normalizedTiers = tiers.map((tierItem, index) => {
-            const normalized = normalizeTierForStorage(tierItem, index);
+            const normalized = normalizeTierForStorage(tierItem, index, finalType);
+            normalized.priority = index;
             return { ...normalized, priority: index };
           });
 
